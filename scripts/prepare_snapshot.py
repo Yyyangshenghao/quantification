@@ -19,7 +19,7 @@ from src.utils.config import load_project_configs, resolve_path
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Prepare a daily snapshot JSON from local feature files.")
     parser.add_argument("--as-of-date", default="", help="As-of date in YYYY-MM-DD format; defaults to latest feature date.")
-    parser.add_argument("--features-file", default="data/features/daily_features.parquet", help="Daily feature parquet.")
+    parser.add_argument("--features-file", default="data/features/daily_features", help="Daily feature parquet file or partitioned directory.")
     parser.add_argument("--benchmark-file", default="data/raw/benchmark_daily.parquet", help="Benchmark price parquet.")
     parser.add_argument("--financials-file", default="data/curated/financials_effective.parquet", help="Point-in-time financial parquet.")
     parser.add_argument("--output-json", default="", help="Snapshot JSON path; defaults to date-based path.")
@@ -40,6 +40,8 @@ def load_positions_frame(positions_cfg: dict, account_cfg: dict) -> pd.DataFrame
             columns=[
                 "symbol",
                 "name",
+                "current_shares",
+                "avg_cost",
                 "current_position_tranches",
                 "current_weight",
                 "extra_tranches",
@@ -63,9 +65,28 @@ def load_positions_frame(positions_cfg: dict, account_cfg: dict) -> pd.DataFrame
         frame["extra_tranches"] = 0
     if "last_fill_price" not in frame.columns:
         frame["last_fill_price"] = 0.0
+    if "current_shares" not in frame.columns:
+        frame["current_shares"] = 0
+    else:
+        frame["current_shares"] = pd.to_numeric(frame["current_shares"], errors="coerce").fillna(0).astype(int)
+    if "avg_cost" not in frame.columns:
+        frame["avg_cost"] = 0.0
+    else:
+        frame["avg_cost"] = pd.to_numeric(frame["avg_cost"], errors="coerce").fillna(0.0)
     if "name" not in frame.columns:
         frame["name"] = frame["symbol"]
-    return frame[["symbol", "name", "current_position_tranches", "current_weight", "extra_tranches", "last_fill_price"]]
+    return frame[
+        [
+            "symbol",
+            "name",
+            "current_shares",
+            "avg_cost",
+            "current_position_tranches",
+            "current_weight",
+            "extra_tranches",
+            "last_fill_price",
+        ]
+    ]
 
 
 def main() -> int:

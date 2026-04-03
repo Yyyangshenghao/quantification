@@ -21,8 +21,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bucket", default="combined", choices=["defensive_dividend", "cyclical_rotation", "combined"], help="Backtest bucket.")
     parser.add_argument("--start-date", required=True, help="Backtest start date.")
     parser.add_argument("--end-date", required=True, help="Backtest end date.")
-    parser.add_argument("--features-file", default="data/features/daily_features.parquet", help="Daily feature parquet.")
+    parser.add_argument("--features-file", default="data/features/daily_features", help="Daily feature parquet file or partitioned directory.")
     parser.add_argument("--benchmark-file", default="data/raw/benchmark_daily.parquet", help="Benchmark parquet.")
+    parser.add_argument("--historical-universe-dir", default="data/curated/universe_history", help="Historical effective universe directory.")
     parser.add_argument("--output-prefix", default="", help="Backtest output prefix.")
     return parser.parse_args()
 
@@ -39,6 +40,7 @@ def main() -> int:
         configs["strategy"],
         universe_rules_cfg=configs["universe_rules"],
         account_cfg=configs["account"],
+        historical_universe_dir=args.historical_universe_dir,
     )
     result = engine.run(features=features, benchmark=benchmark, bucket=args.bucket)
 
@@ -53,6 +55,7 @@ def main() -> int:
         "trade_list": result.trade_list.to_dict(orient="records"),
         "stock_attribution": result.stock_attribution.to_dict(orient="records"),
         "industry_attribution": result.industry_attribution.to_dict(orient="records"),
+        "approximate_backtest": result.approximate_backtest,
     }
     write_json(json_path, payload)
     lines = [
@@ -64,6 +67,7 @@ def main() -> int:
         f"- Max Drawdown: {result.metrics['max_drawdown']:.2%}",
         f"- Win Rate: {result.metrics['win_rate']:.2%}",
         f"- Sharpe: {result.metrics['sharpe']:.2f}",
+        f"- Approximate backtest: {'yes' if result.approximate_backtest else 'no'}",
         "",
         "## Trades",
         "",

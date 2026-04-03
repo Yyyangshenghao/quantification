@@ -1,5 +1,4 @@
-date,symbol,name,holding_state,current_position_tranches,target_position_tranches,current_weight,target_weight,target_position_change,action_enum,priority_score,action_reason,blocked_reason,data_status,latest_total_equity,current_cash,available_buying_power,target_order_value
-2026-04-03,600036.sh,招商银行,FROZEN,1,1,0.03,0.03,0.0,HOLD_FROZEN,0.0,已冻结持仓，仅观察或风险控制。,,ok,100000.0,4000.0,0.0,0.0
-2026-04-03,600000.sh,浦发银行,NONE,0,1,0.0,0.03,0.03,BUY_1,50.205,满足第一笔买点。,,ok,100000.0,4000.0,0.0,3000.0
-2026-04-03,601088.sh,中国神华,NONE,0,0,0.0,0.0,0.0,EMPTY,89.075,未满足开仓条件。,,ok,100000.0,4000.0,0.0,0.0
-2026-04-03,601398.sh,工商银行,NONE,0,0,0.0,0.0,0.0,EMPTY,75.245,未满足开仓条件。,,ok,100000.0,4000.0,0.0,0.0
+date,symbol,name,holding_state,current_position_tranches,target_position_tranches,current_weight,target_weight,target_position_change,current_shares,target_shares,delta_shares,rounded_lots,action_enum,priority_score,action_reason,blocked_reason,data_status,latest_total_equity,current_cash,available_buying_power,target_order_value,estimated_turnover,estimated_commission,estimated_stamp_duty,estimated_total_cash_impact,target_price_reference
+2026-04-30,600036.sh,招商银行,FROZEN,1,1,0.03,0.03,0.0,200,200,0,0,HOLD_FROZEN,0.0,已冻结持仓，仅观察或风险控制。,,ok,200000.0,50000.0,43998.2,0.0,0.0,0.0,0.0,0.0,30.0
+2026-04-30,600000.sh,浦发银行,NONE,0,1,0.0,0.03,0.03,0,600,600,6,BUY_1,49.9197,满足第一笔买点。,,ok,200000.0,50000.0,43998.2,6000.0,6000.0,1.8,0.0,-6001.8,10.0
+2026-04-30,601088.sh,中国神华,NONE,0,0,0.0,0.0,0.0,0,0,0,0,EMPTY,87.9625,未满足开仓条件。,,ok,200000.0,50000.0,43998.2,0.0,0.0,0.0,0.0,0.0,42.0

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from math import ceil
 
 import pandas as pd
 
@@ -18,6 +19,14 @@ def _safe_float(value: object, default: float = 0.0) -> float:
     if pd.isna(numeric):
         return default
     return numeric
+
+
+def _safe_int(value: object, default: int = 0) -> int:
+    try:
+        numeric = int(float(value))
+    except (TypeError, ValueError):
+        return default
+    return numeric if numeric >= 0 else default
 
 
 def _close_to_ma(row: dict, ma_field: str) -> float:
@@ -119,7 +128,8 @@ class SignalEngine:
         self.strategy_cfg = strategy_cfg
         self.universe_rules_cfg = universe_rules_cfg or {}
         self.account_cfg = account_cfg or {}
-        position_sizing = self.account_cfg.get("position_sizing", {})
+        execution_cfg = self.account_cfg.get("execution", {}) if isinstance(self.account_cfg, dict) else {}
+        position_sizing = self.account_cfg.get("position_sizing", {}) if isinstance(self.account_cfg, dict) else {}
         self.default_tranches = int(position_sizing.get("max_tranches_per_stock", strategy_cfg["execution"]["default_tranches"]))
         self.tranche_weight_map = {
             int(key): float(value)
@@ -134,6 +144,12 @@ class SignalEngine:
             unit_weight = 1.0 / float(target_universe) / float(self.default_tranches)
             self.tranche_weight_map = {index: round(unit_weight * index, 6) for index in range(0, self.default_tranches + 1)}
         self.max_single_stock_weight = float(position_sizing.get("max_single_stock_weight", max(self.tranche_weight_map.values(), default=0.0)))
+        self.round_lot = max(1, int(execution_cfg.get("round_lot", 100)))
+        self.commission_rate = float(execution_cfg.get("commission_rate", strategy_cfg["execution"].get("fee_rate", 0.0)))
+        self.stamp_duty_rate_sell = float(
+            execution_cfg.get("stamp_duty_rate_sell", strategy_cfg["execution"].get("stamp_tax_rate", 0.0))
+        )
+        self.min_trade_value = float(position_sizing.get("min_trade_value", 0.0))
 
     def _weight_for_tranches(self, tranches: int) -> float:
         tranches = max(0, int(tranches))
@@ -148,6 +164,8 @@ class SignalEngine:
         holding_state = record.get("holding_state", "NONE")
         record["current_position_tranches"] = current_tranches
         record["current_weight"] = round(current_weight, 6)
+        record["current_shares"] = _safe_int(record.get("current_shares"))
+        record["avg_cost"] = round(_safe_float(record.get("avg_cost")), 4)
         record["risk_flags"] = list(record.get("risk_flags", []))
         record["reason_codes"] = list(record.get("reason_codes", []))
         record["blocked_reason"] = record.get("blocked_reason")
@@ -282,6 +300,120 @@ class SignalEngine:
         record["action_reason"] = action_reason
         return record
 
+    def _merge_position_fields(self, decisions: list[dict], positions: pd.DataFrame) -> None:
+        if positions.empty or not {"symbol"} <= set(positions.columns):
+            return
+        lookup = positions.set_index("symbol").to_dict(orient="index")
+        for decision in decisions:
+            position = lookup.get(decision["symbol"])
+            if not position:
+                continue
+            for field in ("current_shares", "avg_cost", "current_position_tranches", "current_weight", "extra_tranches", "last_fill_price"):
+                if field not in decision or pd.isna(decision.get(field)):
+                    decision[field] = position.get(field)
+
+    def _reset_to_current(self, decision: dict, action_reason: str | None = None) -> dict:
+        decision["target_position_tranches"] = int(decision["current_position_tranches"])
+        decision["target_weight"] = round(_safe_float(decision["current_weight"]), 6)
+        decision["target_position_change"] = 0.0
+        decision["target_shares"] = _safe_int(decision.get("current_shares"))
+        decision["delta_shares"] = 0
+        decision["rounded_lots"] = 0
+        decision["estimated_turnover"] = 0.0
+        decision["estimated_commission"] = 0.0
+        decision["estimated_stamp_duty"] = 0.0
+        decision["estimated_total_cash_impact"] = 0.0
+        decision["target_price_reference"] = round(_safe_float(decision.get("close")), 4) if _safe_float(decision.get("close")) > 0 else None
+        decision["target_order_value"] = 0.0
+        if action_reason:
+            decision["action_reason"] = action_reason
+        return decision
+
+    def _rounded_target_shares(self, target_value: float, price: float) -> int:
+        if target_value <= 0 or price <= 0:
+            return 0
+        raw_shares = int(target_value // price)
+        return raw_shares // self.round_lot * self.round_lot
+
+    def _execution_plan(self, decision: dict, action_enum: str, latest_total_equity: float, orders_degraded: bool) -> tuple[dict, float]:
+        decision["action_enum"] = action_enum
+        price = _safe_float(decision.get("close"))
+        current_shares = _safe_int(decision.get("current_shares"))
+        decision["target_price_reference"] = round(price, 4) if price > 0 else None
+        if orders_degraded or latest_total_equity <= 0 or price <= 0:
+            decision["target_shares"] = None
+            decision["delta_shares"] = None
+            decision["rounded_lots"] = None
+            decision["estimated_turnover"] = None
+            decision["estimated_commission"] = None
+            decision["estimated_stamp_duty"] = None
+            decision["estimated_total_cash_impact"] = None
+            decision["target_order_value"] = None
+            if action_enum in {"HOLD", "HOLD_FROZEN", "EMPTY", "BLOCKED", "DATA_ERROR"}:
+                decision["target_position_tranches"] = int(decision.get("target_position_tranches", decision["current_position_tranches"]))
+                decision["target_weight"] = round(_safe_float(decision.get("target_weight", decision["current_weight"])), 6)
+                decision["target_position_change"] = round(decision["target_weight"] - _safe_float(decision["current_weight"]), 6)
+            return decision, 0.0
+
+        if current_shares <= 0 and int(decision["current_position_tranches"]) > 0 and action_enum in {"BUY_2", "BUY_3", "REDUCE", "SELL_ALL", "HOLD", "HOLD_FROZEN"}:
+            decision["blocked_reason"] = "MISSING_SHARE_COUNT"
+            decision["reason_codes"].append("MISSING_SHARE_COUNT")
+            decision["action_enum"] = "BLOCKED" if action_enum != "DATA_ERROR" else "DATA_ERROR"
+            self._reset_to_current(decision, "缺少当前持仓股数，无法输出可执行订单。")
+            return decision, 0.0
+
+        desired_target_weight = round(_safe_float(decision.get("desired_target_weight", decision.get("target_weight"))), 6)
+        desired_target_tranches = int(decision.get("desired_target_tranches", decision["current_position_tranches"]))
+        target_shares = current_shares
+        if action_enum == "SELL_ALL":
+            target_shares = 0
+        elif action_enum == "REDUCE":
+            target_shares = min(current_shares, self._rounded_target_shares(desired_target_weight * latest_total_equity, price))
+        elif action_enum in {"BUY_1", "BUY_2", "BUY_3"}:
+            target_shares = max(current_shares, self._rounded_target_shares(desired_target_weight * latest_total_equity, price))
+        elif action_enum in {"HOLD", "HOLD_FROZEN", "EMPTY", "BLOCKED", "DATA_ERROR"}:
+            target_shares = current_shares
+
+        delta_shares = target_shares - current_shares
+        estimated_turnover = round(abs(delta_shares) * price, 2)
+        estimated_commission = round(estimated_turnover * self.commission_rate, 2)
+        estimated_stamp_duty = round(estimated_turnover * self.stamp_duty_rate_sell, 2) if delta_shares < 0 else 0.0
+        estimated_total_cash_impact = round(
+            -(estimated_turnover + estimated_commission) if delta_shares > 0 else estimated_turnover - estimated_commission - estimated_stamp_duty,
+            2,
+        )
+        rounded_lots = ceil(abs(delta_shares) / self.round_lot) if delta_shares else 0
+
+        if action_enum in {"BUY_1", "BUY_2", "BUY_3", "REDUCE"} and delta_shares == 0:
+            decision["blocked_reason"] = "ROUND_LOT_BLOCK"
+            decision["reason_codes"].append("ROUND_LOT_BLOCK")
+            decision["action_enum"] = "BLOCKED"
+            self._reset_to_current(decision, "目标变动低于整手约束，无法下达可执行订单。")
+            return decision, 0.0
+
+        if action_enum in {"BUY_1", "BUY_2", "BUY_3", "REDUCE"} and estimated_turnover > 0 and estimated_turnover < self.min_trade_value:
+            decision["blocked_reason"] = "MIN_TRADE_VALUE"
+            decision["reason_codes"].append("MIN_TRADE_VALUE")
+            decision["action_enum"] = "BLOCKED"
+            self._reset_to_current(decision, "目标成交额低于最小交易额，订单被阻断。")
+            return decision, 0.0
+
+        actual_target_weight = round((target_shares * price) / latest_total_equity, 6)
+        decision["target_position_tranches"] = desired_target_tranches if action_enum in {"BUY_1", "BUY_2", "BUY_3", "REDUCE"} else int(
+            decision.get("target_position_tranches", decision["current_position_tranches"])
+        )
+        decision["target_weight"] = actual_target_weight
+        decision["target_position_change"] = round(actual_target_weight - _safe_float(decision["current_weight"]), 6)
+        decision["target_shares"] = target_shares
+        decision["delta_shares"] = delta_shares
+        decision["rounded_lots"] = rounded_lots
+        decision["estimated_turnover"] = estimated_turnover
+        decision["estimated_commission"] = estimated_commission
+        decision["estimated_stamp_duty"] = estimated_stamp_duty
+        decision["estimated_total_cash_impact"] = estimated_total_cash_impact
+        decision["target_order_value"] = estimated_turnover
+        return decision, max(0.0, -estimated_total_cash_impact)
+
     def generate(
         self,
         snapshot: pd.DataFrame,
@@ -290,7 +422,6 @@ class SignalEngine:
         safe_mode: bool = False,
         account_state: dict | None = None,
     ) -> list[dict]:
-        del positions
         if snapshot.empty:
             return []
         account_state = account_state or {}
@@ -301,6 +432,7 @@ class SignalEngine:
         current_invested_value = float(account_state.get("current_invested_value", 0.0))
 
         decisions = [self._base_decision(record.copy(), market_regime, safe_mode) for record in snapshot.to_dict(orient="records")]
+        self._merge_position_fields(decisions, positions)
         fixed_weight = 0.0
         released_cash = 0.0
         buy_requests: list[dict] = []
@@ -309,25 +441,32 @@ class SignalEngine:
             target_tranches = int(decision["desired_target_tranches"])
             if target_tranches > current_tranches:
                 buy_requests.append(decision)
-            else:
-                decision["target_position_tranches"] = target_tranches
-                decision["target_weight"] = round(self._weight_for_tranches(target_tranches), 6)
-                decision["target_position_change"] = round(decision["target_weight"] - decision["current_weight"], 6)
-                decision["action_enum"] = (
-                    "BLOCKED"
-                    if current_tranches == 0 and decision.get("blocked_reason")
-                    else _action_for_target(current_tranches, target_tranches, decision.get("holding_state", "NONE"))
-                )
-                fixed_weight += decision["target_weight"]
-                if not orders_degraded and latest_total_equity > 0:
-                    released_cash += max(0.0, (decision["current_weight"] - decision["target_weight"]) * latest_total_equity)
+                continue
+
+            decision["target_position_tranches"] = target_tranches
+            decision["target_weight"] = round(self._weight_for_tranches(target_tranches), 6)
+            decision["target_position_change"] = round(decision["target_weight"] - decision["current_weight"], 6)
+            action_enum = (
+                "BLOCKED"
+                if current_tranches == 0 and decision.get("blocked_reason")
+                else _action_for_target(current_tranches, target_tranches, decision.get("holding_state", "NONE"))
+            )
+            decision, _ = self._execution_plan(decision, action_enum, latest_total_equity, orders_degraded)
+            fixed_weight += decision["target_weight"]
+            if not orders_degraded and decision.get("estimated_total_cash_impact") is not None:
+                released_cash += max(0.0, float(decision["estimated_total_cash_impact"]))
 
         capacity = max(0.0, float(market_regime["max_total_position"]) - fixed_weight)
+        initial_buying_power = None
         available_buying_power = None
         if not orders_degraded and latest_total_equity > 0:
-            gross_room_value = max(0.0, float(market_regime["max_total_position"]) * latest_total_equity - max(0.0, current_invested_value - released_cash))
+            gross_room_value = max(
+                0.0,
+                float(market_regime["max_total_position"]) * latest_total_equity - max(0.0, current_invested_value - released_cash),
+            )
             cash_room_value = max(0.0, current_cash - reserved_cash + released_cash)
-            available_buying_power = round(min(cash_room_value, gross_room_value), 2)
+            initial_buying_power = round(min(cash_room_value, gross_room_value), 2)
+            available_buying_power = initial_buying_power
 
         ordered_requests = sorted(
             buy_requests,
@@ -339,30 +478,42 @@ class SignalEngine:
         )
         for decision in ordered_requests:
             current_tranches = int(decision["current_position_tranches"])
-            requested_weight = round(decision["desired_target_weight"] - self._weight_for_tranches(current_tranches), 6)
-            requested_value = round(requested_weight * latest_total_equity, 2) if available_buying_power is not None else None
-            cash_blocked = available_buying_power is not None and requested_value is not None and requested_value > available_buying_power + 1e-9
-            if requested_weight <= capacity + 1e-9 and not decision.get("blocked_reason") and not cash_blocked:
-                target_tranches = int(decision["desired_target_tranches"])
-                decision["target_position_tranches"] = target_tranches
-                decision["target_weight"] = round(self._weight_for_tranches(target_tranches), 6)
-                decision["target_position_change"] = round(decision["target_weight"] - decision["current_weight"], 6)
-                decision["action_enum"] = _action_for_target(current_tranches, target_tranches, decision.get("holding_state", "NONE"))
-                capacity = round(capacity - requested_weight, 6)
-                if available_buying_power is not None and requested_value is not None:
-                    available_buying_power = round(max(0.0, available_buying_power - requested_value), 2)
-            else:
-                decision["target_position_tranches"] = current_tranches
-                decision["target_weight"] = round(self._weight_for_tranches(current_tranches), 6)
-                decision["target_position_change"] = round(decision["target_weight"] - decision["current_weight"], 6)
-                decision["action_enum"] = "BLOCKED"
+            target_tranches = int(decision["desired_target_tranches"])
+            decision["target_position_tranches"] = target_tranches
+            decision["target_weight"] = round(self._weight_for_tranches(target_tranches), 6)
+            decision["target_position_change"] = round(decision["target_weight"] - decision["current_weight"], 6)
+            decision, required_cash = self._execution_plan(
+                decision,
+                _action_for_target(current_tranches, target_tranches, decision.get("holding_state", "NONE")),
+                latest_total_equity,
+                orders_degraded,
+            )
+            requested_weight = max(0.0, decision["target_weight"] - _safe_float(decision["current_weight"]))
+            cash_blocked = available_buying_power is not None and required_cash > available_buying_power + 1e-9
+            if (
+                decision["action_enum"] in {"BUY_1", "BUY_2", "BUY_3"}
+                and requested_weight <= capacity + 1e-9
+                and not decision.get("blocked_reason")
+                and not cash_blocked
+            ):
+                capacity = round(max(0.0, capacity - requested_weight), 6)
+                if available_buying_power is not None:
+                    available_buying_power = round(max(0.0, available_buying_power - required_cash), 2)
+                continue
+
+            if decision["action_enum"] in {"BUY_1", "BUY_2", "BUY_3"}:
                 if cash_blocked:
                     decision["blocked_reason"] = "INSUFFICIENT_CASH"
+                    decision["reason_codes"].append("INSUFFICIENT_CASH")
                 elif not decision.get("blocked_reason"):
                     decision["blocked_reason"] = "REGIME_CAP_BLOCK"
                     decision["reason_codes"].append("REGIME_CAP_BLOCK")
-                decision["action_reason"] = "买入请求因仓位上限、安全模式或资金约束被阻断。"
+                decision["action_enum"] = "BLOCKED"
+                self._reset_to_current(decision, "买入请求因仓位上限、资金约束或执行约束被阻断。")
 
+        remaining_buying_power = initial_buying_power if initial_buying_power is not None else None
+        if available_buying_power is not None:
+            remaining_buying_power = available_buying_power
         for decision in decisions:
             decision["action_enum"] = decision.get("action_enum", "EMPTY")
             if decision["action_enum"] not in ACTIONS:
@@ -372,21 +523,28 @@ class SignalEngine:
             decision["risk_flags"] = sorted(set(decision.get("risk_flags", [])))
             decision["current_position_tranches"] = int(decision["current_position_tranches"])
             decision["target_position_tranches"] = int(decision.get("target_position_tranches", decision["current_position_tranches"]))
+            decision["current_shares"] = _safe_int(decision.get("current_shares"))
             decision["target_weight"] = round(_safe_float(decision.get("target_weight")), 6)
             decision["current_weight"] = round(_safe_float(decision.get("current_weight")), 6)
             decision["target_position_change"] = round(_safe_float(decision.get("target_position_change")), 6)
-            if available_buying_power is None:
+            if remaining_buying_power is None:
                 decision["target_order_value"] = None
+                decision["target_shares"] = decision.get("target_shares")
+                decision["delta_shares"] = decision.get("delta_shares")
+                decision["rounded_lots"] = decision.get("rounded_lots")
+                decision["estimated_turnover"] = decision.get("estimated_turnover")
+                decision["estimated_commission"] = decision.get("estimated_commission")
+                decision["estimated_stamp_duty"] = decision.get("estimated_stamp_duty")
+                decision["estimated_total_cash_impact"] = decision.get("estimated_total_cash_impact")
                 decision["orders_degraded"] = True
                 decision["latest_total_equity"] = None
                 decision["current_cash"] = None
                 decision["available_buying_power"] = None
             else:
-                decision["target_order_value"] = round(decision["target_position_change"] * latest_total_equity, 2)
                 decision["orders_degraded"] = False
                 decision["latest_total_equity"] = latest_total_equity
                 decision["current_cash"] = current_cash
-                decision["available_buying_power"] = available_buying_power
+                decision["available_buying_power"] = remaining_buying_power
         return sorted(decisions, key=lambda item: (item.get("holding_state") == "NONE", item["symbol"]))
 
     @staticmethod

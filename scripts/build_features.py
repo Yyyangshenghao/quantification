@@ -20,11 +20,12 @@ from src.pipeline.features import (
 )
 from src.utils.config import load_project_configs, resolve_path
 from src.utils.exceptions import DataSourceError
+from src.utils.storage import write_feature_dataset
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Build point-in-time daily features from cached raw data.")
-    parser.add_argument("--output-file", default="data/features/daily_features.parquet", help="Daily feature parquet output path.")
+    parser.add_argument("--output-file", default="data/features/daily_features", help="Daily feature parquet file or yearly-partitioned directory output path.")
     parser.add_argument("--latest-output-file", default="data/features/latest_feature_snapshot.parquet", help="Latest feature snapshot output path.")
     return parser.parse_args()
 
@@ -43,6 +44,8 @@ def main() -> int:
     metric_map_cfg = configs["metric_map"]
 
     prices = read_required("data/raw/price_daily.parquet")
+    benchmark_daily = read_required("data/raw/benchmark_daily.parquet")
+    stock_list = read_required("data/raw/stock_list.parquet")
     stock_valuation = read_required("data/raw/stock_valuation.parquet")
     industry_daily = read_required("data/raw/industry_daily.parquet")
     industry_members = read_required("data/raw/industry_members.parquet")
@@ -50,7 +53,7 @@ def main() -> int:
     st_flags = read_required("data/raw/st_flags.parquet")
     market_caps = read_required("data/raw/market_caps.parquet")
 
-    price_features = compute_price_features(prices)
+    price_features = compute_price_features(prices, stock_list=stock_list, benchmark_daily=benchmark_daily)
     financials_effective = prepare_financial_effective_frame(financials, strategy_cfg)
     stock_quantile_panel = compute_stock_quantile_panel(stock_valuation, strategy_cfg)
     industry_quantile_panel = compute_industry_quantile_panel(industry_daily, strategy_cfg, metric_map_cfg)
@@ -65,9 +68,7 @@ def main() -> int:
         strategy_cfg,
         metric_map_cfg,
     )
-    output_file = resolve_path(args.output_file)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    daily_features.to_parquet(output_file, index=False)
+    write_feature_dataset(daily_features, args.output_file)
 
     latest = daily_features.sort_values(["symbol", "date"]).groupby("symbol", as_index=False).tail(1).copy()
     latest_output = resolve_path(args.latest_output_file)

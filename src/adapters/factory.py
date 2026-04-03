@@ -38,6 +38,7 @@ class CompositeAdapter(DataAdapter):
         self.adapters = adapters
         self.adapters_by_name = {adapter.name: adapter for adapter in adapters}
         self.source_order_map = source_order_map or {}
+        self.call_history: list[dict[str, object]] = []
 
     def _ordered_adapters(self, method_name: str) -> list[DataAdapter]:
         configured_names = self.source_order_map.get(method_name, [])
@@ -58,8 +59,17 @@ class CompositeAdapter(DataAdapter):
 
     def _dispatch(self, method_name: str, *args, **kwargs) -> pd.DataFrame:
         errors: list[str] = []
-        for adapter in self._ordered_adapters(method_name):
+        for attempt_index, adapter in enumerate(self._ordered_adapters(method_name), start=1):
             if not adapter.is_available():
+                self.call_history.append(
+                    {
+                        "method": method_name,
+                        "adapter": adapter.name,
+                        "success": False,
+                        "error": "adapter_unavailable",
+                        "attempt_index": attempt_index,
+                    }
+                )
                 continue
             method = getattr(adapter, method_name)
             try:
@@ -68,9 +78,28 @@ class CompositeAdapter(DataAdapter):
                     raise DataSourceError(f"{adapter.name}.{method_name} must return DataFrame.")
                 if frame.empty:
                     raise DataSourceError(f"{adapter.name}.{method_name} returned empty DataFrame.")
+                self.call_history.append(
+                    {
+                        "method": method_name,
+                        "adapter": adapter.name,
+                        "success": True,
+                        "error": None,
+                        "attempt_index": attempt_index,
+                        "rows": int(len(frame)),
+                    }
+                )
                 return frame
             except Exception as exc:
                 errors.append(f"{adapter.name}: {exc}")
+                self.call_history.append(
+                    {
+                        "method": method_name,
+                        "adapter": adapter.name,
+                        "success": False,
+                        "error": str(exc),
+                        "attempt_index": attempt_index,
+                    }
+                )
         raise DataSourceError(f"All adapters failed for {method_name}: {' | '.join(errors)}")
 
     def get_stock_list(self, as_of_date: str) -> pd.DataFrame:

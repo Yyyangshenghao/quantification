@@ -1,0 +1,12 @@
+{
+  "as_of_date": "2026-03-31",
+  "rebalance_day": true,
+  "effective_from": "2026-04-01",
+  "effective_to": "2026-04-30",
+  "methodology_version": "effective_universe_v2",
+  "candidate_pool_size": 0,
+  "effective_universe_size": 0,
+  "change_counts": {},
+  "changes": [],
+  "stocks": []
+}

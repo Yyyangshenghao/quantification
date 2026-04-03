@@ -46,6 +46,28 @@ def test_akshare_industry_daily_maps_publish_date(configs: dict, monkeypatch) ->
     assert frame.loc[0, "pb"] == 0.94
 
 
+def test_akshare_stock_list_includes_listed_date_from_exchange_tables(configs: dict, monkeypatch) -> None:
+    adapter = AkshareAdapter(configs["data_sources"])
+
+    def fake_call(namespace: str, loader, *cache_parts) -> pd.DataFrame:
+        if namespace == "stock_list_sh_main":
+            return pd.DataFrame([{"证券代码": "600000", "证券简称": "浦发银行", "上市日期": "1999-11-10"}])
+        if namespace == "stock_list_sh_star":
+            return pd.DataFrame(columns=["证券代码", "证券简称", "上市日期"])
+        if namespace == "stock_list_sz_a":
+            return pd.DataFrame([{"A股代码": "000001", "A股简称": "平安银行", "A股上市日期": "1991-04-03"}])
+        raise AssertionError(f"Unexpected namespace: {namespace}")
+
+    monkeypatch.setattr(adapter, "_call_with_cache", fake_call)
+
+    frame = adapter.get_stock_list("2026-04-03")
+
+    assert frame.to_dict(orient="records") == [
+        {"code": "000001.sz", "name": "平安银行", "listed_date": "1991-04-03", "as_of_date": "2026-04-03"},
+        {"code": "600000.sh", "name": "浦发银行", "listed_date": "1999-11-10", "as_of_date": "2026-04-03"},
+    ]
+
+
 def test_akshare_industry_members_falls_back_on_empty_primary(configs: dict, monkeypatch) -> None:
     adapter = AkshareAdapter(configs["data_sources"])
 

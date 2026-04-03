@@ -1,0 +1,14 @@
+{
+  "as_of_date": "2026-04-30",
+  "source": "demo_fixture",
+  "providers": [
+    {
+      "method": "demo_fixture",
+      "adapter": "local_demo_fixture",
+      "success": true,
+      "error": null,
+      "attempt_index": 1,
+      "rows": 4
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from collections import Counter
 from pathlib import Path
 
@@ -431,7 +432,7 @@ def serialize_universe_payload(
             }
         )
     return {
-        "generated_at": pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": os.environ.get("QUANTILE_FIXED_GENERATED_AT", pd.Timestamp.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")),
         "as_of_date": as_of_date,
         "effective_from": effective_from,
         "effective_to": effective_to,

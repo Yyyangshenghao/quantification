@@ -1,0 +1,6 @@
+[
+  {"code": "600000.sh", "date": "2025-12-31", "latest_net_profit": 100.0, "roe": 10.5, "cfo_ttm": 120.0, "is_st": false},
+  {"code": "601398.sh", "date": "2025-12-31", "latest_net_profit": 120.0, "roe": 10.0, "cfo_ttm": 130.0, "is_st": false},
+  {"code": "600036.sh", "date": "2025-12-31", "latest_net_profit": 130.0, "roe": 11.0, "cfo_ttm": 140.0, "is_st": false},
+  {"code": "601088.sh", "date": "2025-12-31", "latest_net_profit": 160.0, "roe": 13.0, "cfo_ttm": 200.0, "is_st": false}
+]

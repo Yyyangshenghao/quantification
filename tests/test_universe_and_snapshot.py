@@ -115,7 +115,18 @@ def test_decision_scope_includes_effective_universe_union_current_holdings_and_f
         ]
     )
     positions = pd.DataFrame(
-        [{"symbol": "600011.sh", "name": "持有股", "current_position_tranches": 1, "current_weight": 0.03, "extra_tranches": 0, "last_fill_price": 10.0}]
+        [
+            {
+                "symbol": "600011.sh",
+                "name": "持有股",
+                "current_position_tranches": 1,
+                "current_weight": 0.03,
+                "current_shares": 300,
+                "avg_cost": 10.0,
+                "extra_tranches": 0,
+                "last_fill_price": 10.0,
+            }
+        ]
     )
     universe_cfg = {
         "rebalance_day": False,
@@ -151,7 +162,18 @@ def test_force_exit_holding_sells_all(configs: dict) -> None:
     account_cfg["account"]["latest_total_equity"] = 100000
     feature_snapshot = pd.DataFrame([_feature_row("600020.sh", "defensive_dividend", "银行", 88.0)])
     positions = pd.DataFrame(
-        [{"symbol": "600020.sh", "name": "强退股", "current_position_tranches": 1, "current_weight": 0.03, "extra_tranches": 0, "last_fill_price": 10.0}]
+        [
+            {
+                "symbol": "600020.sh",
+                "name": "强退股",
+                "current_position_tranches": 1,
+                "current_weight": 0.03,
+                "current_shares": 300,
+                "avg_cost": 10.0,
+                "extra_tranches": 0,
+                "last_fill_price": 10.0,
+            }
+        ]
     )
     feature_snapshot.loc[0, "is_st"] = True
     financials = _financial_history("600020.sh", is_st=True)

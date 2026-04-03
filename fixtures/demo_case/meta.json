@@ -1,0 +1,9 @@
+{
+  "as_of_date": "2026-04-30",
+  "generated_at": "2026-04-30T15:00:00Z",
+  "data_source": {
+    "type": "fixture",
+    "name": "demo_case",
+    "provider": "local_demo_fixture"
+  }
+}

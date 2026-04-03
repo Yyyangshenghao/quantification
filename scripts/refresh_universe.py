@@ -29,7 +29,7 @@ from src.utils.config import load_project_configs, resolve_path
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate the effective universe from rule-based candidate screening.")
     parser.add_argument("--as-of-date", default="", help="As-of date; defaults to latest available feature date.")
-    parser.add_argument("--features-file", default="data/features/daily_features.parquet", help="Daily feature parquet.")
+    parser.add_argument("--features-file", default="data/features/daily_features", help="Daily feature parquet file or partitioned directory.")
     parser.add_argument("--apply", action="store_true", help="Write the generated effective universe back to config/universe.yml.")
     parser.add_argument("--frequency", choices=["monthly", "quarterly"], default="", help="Override rebalance frequency for this run.")
     parser.add_argument("--preview-only", action="store_true", help="Preview the generated universe without applying it.")
@@ -113,7 +113,7 @@ def main() -> int:
         )
     resolve_path("reports/universe/latest.md").write_text("\n".join(lines).strip() + "\n", encoding="utf-8")
 
-    if args.apply and not args.preview_only and report_payload["rebalance_day"]:
+    if args.apply and not args.preview_only:
         write_universe_outputs(payload, report_payload)
     return 0
 

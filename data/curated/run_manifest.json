@@ -1,0 +1,26 @@
+{
+  "as_of_date": "2026-04-30",
+  "git_commit": "a6a120972fecc987deb89cde96c0216bf282696f",
+  "data_source": {
+    "type": "fixture",
+    "name": "demo_case",
+    "provider": "local_demo_fixture"
+  },
+  "config_hashes": {
+    "config/account.yml": "997c8fa175dc5562aaed18a944df6447ff67e92be222cecd35b60655025feb7f",
+    "config/positions.yml": "78e1699496cd7c0db543976ebabaf161f4d870a2aa321404c068fd56ece0d312",
+    "config/universe.yml": "9f83e8db450439b07e0795183f19672fb928868961ad6c266fed7ffad08ed63f",
+    "config/strategy.yml": "016d76bb26efd6c8a51f34c0e01b115150b36ece96e9165e64b5d3402ed20329",
+    "config/metric_map.yml": "5d01eaf16b945566c3686dd66fd2c52f6184ee7afa2712890571982fd35901ce",
+    "config/universe_rules.yml": "e2634a7a00984cd585e58e8c0035300228db05cc43b45a5795dc7a1213f359bc"
+  },
+  "input_hashes": {
+    "/Users/meseg/shu/stocks/quantile/fixtures/demo_case/input/account.yml": "997c8fa175dc5562aaed18a944df6447ff67e92be222cecd35b60655025feb7f",
+    "/Users/meseg/shu/stocks/quantile/fixtures/demo_case/input/positions.yml": "78e1699496cd7c0db543976ebabaf161f4d870a2aa321404c068fd56ece0d312",
+    "/Users/meseg/shu/stocks/quantile/fixtures/demo_case/input/universe_seed.yml": "0816fa86f0d51cd9f493b5a6f14cd8cb530e6fb102174dd3c1f747d14ce3fdca",
+    "/Users/meseg/shu/stocks/quantile/fixtures/demo_case/input/features.json": "ecf777a5bba40ece88115432ccab67edfe457ac978686c40c37ab1ae6010dff1",
+    "/Users/meseg/shu/stocks/quantile/fixtures/demo_case/input/benchmark.json": "1fc2652e3f9faaf5ae4e699df41373fea8d16c7207ea95e08f71b3fe6192b8d4",
+    "/Users/meseg/shu/stocks/quantile/fixtures/demo_case/input/financials.json": "ad614b197814fb9eac5fa71c1765b8fc37329982d10c54040fff2809b6babd47"
+  },
+  "mode": "demo_case"
+}

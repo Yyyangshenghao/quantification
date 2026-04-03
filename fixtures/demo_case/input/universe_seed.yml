@@ -1,0 +1,25 @@
+generated_at: "2026-03-31T15:00:00Z"
+as_of_date: "2026-03-31"
+effective_from: "2026-04-01"
+effective_to: "2026-04-30"
+methodology_version: effective_universe_v2
+rebalance_frequency: monthly
+rebalance_day: true
+stocks:
+  - symbol: 600036.sh
+    name: 招商银行
+    bucket: defensive_dividend
+    industry_l1: 银行
+    main_metric: pb
+    final_score: 76.0
+    stock_q_blended: 24.0
+    industry_q_blended: 25.0
+    roe: 11.0
+    dv_ttm: 0.032
+    market_cap_billion: 250.0
+    avg_amount_60d_million: 160.0
+    industry_rank: 2
+    selected_as: retained
+    cycle_trap: false
+    force_exit_reasons: []
+changes: []

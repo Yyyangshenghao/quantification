@@ -2,14 +2,43 @@ from __future__ import annotations
 
 import math
 
+import numpy as np
+
 import pandas as pd
 
-from src.strategy.metric_map import bucket_for_industry, metric_for_industry
+from src.strategy.metric_map import bucket_for_industry_optional, metric_for_industry_optional
 from src.strategy.quality import evaluate_quality, is_cycle_peak_trap, percentile_rank
 from src.strategy.valuation import add_quantile_columns, latest_quantiles
 
 
-def compute_price_features(price_frame: pd.DataFrame) -> pd.DataFrame:
+def _compute_listed_days_from_calendar(
+    ordered: pd.DataFrame,
+    stock_list: pd.DataFrame | None,
+    benchmark_daily: pd.DataFrame | None,
+) -> pd.Series:
+    if stock_list is None or benchmark_daily is None or stock_list.empty or benchmark_daily.empty:
+        return pd.Series(pd.NA, index=ordered.index, dtype="Float64")
+    if "listed_date" not in stock_list.columns:
+        return pd.Series(pd.NA, index=ordered.index, dtype="Float64")
+    listed_dates = stock_list[["code", "listed_date"]].drop_duplicates(subset=["code"]).copy()
+    listed_dates["code"] = listed_dates["code"].astype(str)
+    listed_dates["listed_date"] = pd.to_datetime(listed_dates["listed_date"], errors="coerce")
+    merged = ordered[["code", "date"]].merge(listed_dates, how="left", on="code")
+    trade_dates = pd.Index(pd.to_datetime(benchmark_daily["date"], errors="coerce").dropna().sort_values().unique())
+    if trade_dates.empty:
+        return pd.Series(pd.NA, index=ordered.index, dtype="Float64")
+    current_positions = trade_dates.searchsorted(pd.to_datetime(merged["date"], errors="coerce"), side="right")
+    listed_positions = trade_dates.searchsorted(merged["listed_date"].fillna(trade_dates[0]), side="left")
+    values = current_positions - listed_positions
+    values = np.where(merged["listed_date"].isna(), np.nan, np.maximum(values, 0))
+    return pd.Series(values, index=ordered.index, dtype="Float64")
+
+
+def compute_price_features(
+    price_frame: pd.DataFrame,
+    stock_list: pd.DataFrame | None = None,
+    benchmark_daily: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     ordered = price_frame.sort_values(["code", "date"]).copy()
     grouped = ordered.groupby("code", group_keys=False)
     for window in (20, 60, 120, 200, 250):
@@ -28,7 +57,8 @@ def compute_price_features(price_frame: pd.DataFrame) -> pd.DataFrame:
     )
     ordered["atr20"] = grouped["tr"].transform(lambda series: series.rolling(20, min_periods=1).mean())
     ordered["avg_amount_60d_million"] = grouped["amount"].transform(lambda series: series.rolling(60, min_periods=1).mean()) / 1e6
-    ordered["listed_days"] = grouped.cumcount() + 1
+    listed_days_from_calendar = _compute_listed_days_from_calendar(ordered, stock_list=stock_list, benchmark_daily=benchmark_daily)
+    ordered["listed_days"] = listed_days_from_calendar.fillna(grouped.cumcount() + 1)
     ordered["ma20_slope_10d"] = grouped["ma20"].transform(lambda series: series.pct_change(10))
     ordered["ma60_slope_20d"] = grouped["ma60"].transform(lambda series: series.pct_change(20))
     ordered["ma120_slope_20d"] = grouped["ma120"].transform(lambda series: series.pct_change(20))
@@ -212,6 +242,74 @@ def _coalesce_metric_quantiles(frame: pd.DataFrame, metric: str) -> tuple[pd.Ser
     )
 
 
+def _industry_level_rank(level: object) -> int | None:
+    if level is None or pd.isna(level):
+        return None
+    value = str(level).strip().lower()
+    mapping = {
+        "first": 1,
+        "一级行业": 1,
+        "一级": 1,
+        "second": 2,
+        "二级行业": 2,
+        "二级": 2,
+        "third": 3,
+        "三级行业": 3,
+        "三级": 3,
+    }
+    return mapping.get(value)
+
+
+def _normalize_industry_members(industry_members: pd.DataFrame) -> pd.DataFrame:
+    if industry_members.empty:
+        return pd.DataFrame(
+            columns=[
+                "symbol",
+                "name",
+                "industry_l1_code",
+                "industry_l1",
+                "industry_l2_code",
+                "industry_l2",
+                "industry_l3_code",
+                "industry_l3",
+                "industry_code",
+                "industry",
+            ]
+        )
+    members = industry_members.rename(columns={"code": "symbol", "industry_name": "industry"}).copy()
+    members["symbol"] = members["symbol"].astype(str)
+    members["industry_code"] = members["industry_code"].astype(str).str.replace(".SI", "", regex=False)
+    if "name" not in members.columns:
+        members["name"] = members["symbol"]
+    members["_row_order"] = range(len(members))
+    if "industry_level" in members.columns:
+        members["_level_rank"] = members["industry_level"].map(_industry_level_rank)
+    else:
+        members["_level_rank"] = pd.NA
+
+    rows: list[dict] = []
+    for symbol, group in members.groupby("symbol", sort=False):
+        ordered = group.drop_duplicates(subset=["industry_code", "industry"]).copy()
+        ordered["_level_rank"] = ordered["_level_rank"].fillna(pd.Series(range(1, len(ordered) + 1), index=ordered.index))
+        ordered = ordered.sort_values(["_level_rank", "_row_order"], ascending=[True, True]).reset_index(drop=True)
+        entry = {
+            "symbol": symbol,
+            "name": str(ordered["name"].dropna().iloc[0]) if ordered["name"].notna().any() else symbol,
+        }
+        for idx, suffix in enumerate(("l1", "l2", "l3"), start=1):
+            row = ordered[ordered["_level_rank"] == idx].head(1)
+            if row.empty and len(ordered) >= idx:
+                row = ordered.iloc[[idx - 1]]
+            if row.empty:
+                continue
+            entry[f"industry_{suffix}_code"] = str(row.iloc[0]["industry_code"])
+            entry[f"industry_{suffix}"] = row.iloc[0]["industry"]
+        entry["industry_code"] = entry.get("industry_l1_code") or entry.get("industry_l2_code") or entry.get("industry_l3_code")
+        entry["industry"] = entry.get("industry_l1") or entry.get("industry_l2") or entry.get("industry_l3")
+        rows.append(entry)
+    return pd.DataFrame(rows)
+
+
 def build_daily_feature_panel(
     price_features: pd.DataFrame,
     financials_effective: pd.DataFrame,
@@ -224,15 +322,7 @@ def build_daily_feature_panel(
     metric_map_cfg: dict,
 ) -> pd.DataFrame:
     panel = price_features.rename(columns={"code": "symbol"}).copy()
-    members = industry_members.rename(columns={"code": "symbol", "industry_name": "industry"})
-    members["industry_code"] = members["industry_code"].astype(str).str.replace(".SI", "", regex=False)
-    if "name" not in members.columns:
-        members["name"] = members["symbol"]
-    members = (
-        members[["symbol", "name", "industry_code", "industry"]]
-        .groupby("symbol", as_index=False)
-        .agg({"name": "first", "industry_code": "last", "industry": "first"})
-    )
+    members = _normalize_industry_members(industry_members)
     panel = panel.merge(members, how="left", on="symbol")
 
     financial_pti = financials_effective.rename(columns={"code": "symbol"})[
@@ -288,7 +378,7 @@ def build_daily_feature_panel(
     panel["industry_pe_ttm_q_5y"] = pd.to_numeric(panel.get("industry_pe_ttm_q_5y"), errors="coerce")
     panel["industry_pe_ttm_q_10y"] = pd.to_numeric(panel.get("industry_pe_ttm_q_10y"), errors="coerce")
     panel["industry_pe_ttm_q_blended"] = pd.to_numeric(panel.get("industry_pe_ttm_q_blended"), errors="coerce")
-    panel["primary_metric"] = panel["industry"].map(lambda industry: metric_for_industry(industry, metric_map_cfg) if pd.notna(industry) else None)
+    panel["primary_metric"] = panel["industry"].map(lambda industry: metric_for_industry_optional(industry, metric_map_cfg))
     panel["main_metric"] = panel["primary_metric"]
     panel["stock_q_5y"] = panel.apply(
         lambda row: row.get(f"stock_{row['main_metric']}_q_5y") if pd.notna(row.get("main_metric")) else pd.NA,
@@ -318,7 +408,7 @@ def build_daily_feature_panel(
         lambda row: row.get(f"stock_{row['main_metric']}_history_observations") if pd.notna(row.get("main_metric")) else pd.NA,
         axis=1,
     )
-    panel["bucket"] = panel["industry"].map(lambda industry: bucket_for_industry(industry, metric_map_cfg) if pd.notna(industry) else None)
+    panel["bucket"] = panel["industry"].map(lambda industry: bucket_for_industry_optional(industry, metric_map_cfg))
 
     panel["market_cap_percentile"] = panel.groupby("date", group_keys=False).apply(
         lambda frame: _cross_sectional_percentiles(frame, "market_cap_billion", higher_is_better=True)

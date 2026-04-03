@@ -17,6 +17,12 @@ def bucket_for_industry(industry: str, metric_map_cfg: dict) -> str:
     return bucket
 
 
+def bucket_for_industry_optional(industry: str | None, metric_map_cfg: dict) -> str | None:
+    if not industry:
+        return None
+    return metric_map_cfg.get("industry_bucket_map", {}).get(industry)
+
+
 def metric_for_industry(industry: str, metric_map_cfg: dict) -> str:
     metric = metric_map_cfg.get("industry_metric_map", {}).get(industry)
     if metric:
@@ -26,6 +32,18 @@ def metric_for_industry(industry: str, metric_map_cfg: dict) -> str:
     if not fallback:
         raise ConfigError(f"Metric mapping missing for industry={industry}, bucket={bucket}")
     return fallback
+
+
+def metric_for_industry_optional(industry: str | None, metric_map_cfg: dict) -> str | None:
+    if not industry:
+        return None
+    metric = metric_map_cfg.get("industry_metric_map", {}).get(industry)
+    if metric:
+        return metric
+    bucket = bucket_for_industry_optional(industry, metric_map_cfg)
+    if not bucket:
+        return None
+    return metric_map_cfg.get("bucket_default_metric", {}).get(bucket)
 
 
 def is_financial_industry(industry: str, metric_map_cfg: dict) -> bool:

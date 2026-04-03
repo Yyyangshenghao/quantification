@@ -45,15 +45,49 @@ class AkshareAdapter(DataAdapter):
         return fn(**filtered_kwargs)
 
     def get_stock_list(self, as_of_date: str) -> pd.DataFrame:
-        frame = self._call_with_cache(
-            "stock_list",
-            lambda: self._invoke("stock_info_a_code_name"),
-            as_of_date,
+        detail_frames: list[pd.DataFrame] = []
+        stock_list_specs = (
+            ("stock_list_sh_main", "stock_info_sh_name_code", {"symbol": "主板A股"}, {"证券代码": "code", "证券简称": "name", "上市日期": "listed_date"}),
+            ("stock_list_sh_star", "stock_info_sh_name_code", {"symbol": "科创板"}, {"证券代码": "code", "证券简称": "name", "上市日期": "listed_date"}),
+            ("stock_list_sz_a", "stock_info_sz_name_code", {"symbol": "A股列表"}, {"A股代码": "code", "A股简称": "name", "A股上市日期": "listed_date"}),
         )
-        renamed = frame.rename(columns={"code": "code", "name": "name"})
+        for namespace, fn_name, kwargs, rename_map in stock_list_specs:
+            try:
+                frame = self._call_with_cache(
+                    namespace,
+                    lambda fn_name=fn_name, kwargs=kwargs: self._invoke(fn_name, **kwargs),
+                    as_of_date,
+                    namespace,
+                )
+            except DataSourceError:
+                continue
+            if frame.empty:
+                continue
+            normalized = frame.rename(columns=rename_map)
+            if {"code", "name"} - set(normalized.columns):
+                continue
+            selected_columns = ["code", "name"]
+            if "listed_date" in normalized.columns:
+                selected_columns.append("listed_date")
+            detail_frames.append(normalized[selected_columns].copy())
+
+        if detail_frames:
+            renamed = pd.concat(detail_frames, ignore_index=True)
+        else:
+            frame = self._call_with_cache(
+                "stock_list",
+                lambda: self._invoke("stock_info_a_code_name"),
+                as_of_date,
+            )
+            renamed = frame.rename(columns={"code": "code", "name": "name"})
         renamed["code"] = renamed["code"].map(normalize_symbol)
+        if "listed_date" in renamed.columns:
+            renamed["listed_date"] = pd.to_datetime(renamed["listed_date"], errors="coerce").dt.strftime("%Y-%m-%d")
+        else:
+            renamed["listed_date"] = pd.NA
         renamed["as_of_date"] = as_of_date
-        return renamed[["code", "name", "as_of_date"]]
+        renamed = renamed.drop_duplicates(subset=["code"]).sort_values("code").reset_index(drop=True)
+        return renamed[["code", "name", "listed_date", "as_of_date"]]
 
     def get_price_daily(
         self, symbols: list[str], start_date: str, end_date: str, adjust: str

@@ -1,0 +1,41 @@
+{
+  "as_of_date": "2026-04-30",
+  "tables": [
+    {
+      "path": "/Users/meseg/shu/stocks/quantile/data/demo_case/daily_features.parquet",
+      "exists": true,
+      "rows": 4,
+      "missing_rate": 0.0,
+      "date_min": "2026-04-30",
+      "date_max": "2026-04-30",
+      "stale": false
+    },
+    {
+      "path": "/Users/meseg/shu/stocks/quantile/data/demo_case/benchmark_daily.parquet",
+      "exists": true,
+      "rows": 3,
+      "missing_rate": 0.0,
+      "date_min": "2026-04-28",
+      "date_max": "2026-04-30",
+      "stale": false
+    },
+    {
+      "path": "/Users/meseg/shu/stocks/quantile/data/demo_case/financials_effective.parquet",
+      "exists": true,
+      "rows": 4,
+      "missing_rate": 0.0,
+      "date_min": "2025-12-31",
+      "date_max": "2025-12-31",
+      "stale": true
+    },
+    {
+      "path": "reports/daily/orders_latest.json",
+      "exists": true,
+      "rows": 3,
+      "missing_rate": 0.037037,
+      "date_min": "2026-04-30",
+      "date_max": "2026-04-30",
+      "stale": false
+    }
+  ]
+}

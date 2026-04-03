@@ -10,6 +10,9 @@ cache:
   enabled: true
   format: parquet
   compression: zstd
+  clear_on_run: true
+  directories:
+    - data/raw/akshare
 
 retry:
   attempts: 3

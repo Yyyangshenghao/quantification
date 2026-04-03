@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 
 import pandas as pd
 
@@ -14,6 +15,11 @@ def test_backtest_executes_at_next_day_open(configs: dict) -> None:
     account_cfg["account"]["initial_capital"] = 100_000
     account_cfg["account"]["current_cash"] = 100_000
     account_cfg["account"]["latest_total_equity"] = 100_000
+    account_cfg["execution"]["commission_rate"] = 0.0
+    account_cfg["execution"]["stamp_duty_rate_sell"] = 0.0
+    account_cfg["execution"]["slippage_bps"] = 0
+    account_cfg["execution"]["round_lot"] = 1
+    account_cfg["position_sizing"]["min_trade_value"] = 0
     strategy_cfg["execution"]["fee_rate"] = 0.0
     strategy_cfg["execution"]["stamp_tax_rate"] = 0.0
     strategy_cfg["execution"]["slippage_rate"] = 0.0
@@ -97,6 +103,11 @@ def test_backtest_falls_back_when_historical_effective_universe_is_missing(confi
     account_cfg["account"]["initial_capital"] = 100_000
     account_cfg["account"]["current_cash"] = 100_000
     account_cfg["account"]["latest_total_equity"] = 100_000
+    account_cfg["execution"]["commission_rate"] = 0.0
+    account_cfg["execution"]["stamp_duty_rate_sell"] = 0.0
+    account_cfg["execution"]["slippage_bps"] = 0
+    account_cfg["execution"]["round_lot"] = 1
+    account_cfg["position_sizing"]["min_trade_value"] = 0
     strategy_cfg["execution"]["fee_rate"] = 0.0
     strategy_cfg["execution"]["stamp_tax_rate"] = 0.0
     strategy_cfg["execution"]["slippage_rate"] = 0.0
@@ -151,6 +162,7 @@ def test_backtest_falls_back_when_historical_effective_universe_is_missing(confi
     result = engine.run(features=features, benchmark=benchmark, bucket="combined")
     assert len(result.trade_list) == 1
     assert result.trade_list.iloc[0]["action"] == "BUY_1"
+    assert result.approximate_backtest is True
 
 
 def test_backtest_carries_position_state_between_days(configs: dict) -> None:
@@ -160,6 +172,11 @@ def test_backtest_carries_position_state_between_days(configs: dict) -> None:
     account_cfg["account"]["initial_capital"] = 100_000
     account_cfg["account"]["current_cash"] = 100_000
     account_cfg["account"]["latest_total_equity"] = 100_000
+    account_cfg["execution"]["commission_rate"] = 0.0
+    account_cfg["execution"]["stamp_duty_rate_sell"] = 0.0
+    account_cfg["execution"]["slippage_bps"] = 0
+    account_cfg["execution"]["round_lot"] = 1
+    account_cfg["position_sizing"]["min_trade_value"] = 0
     strategy_cfg["execution"]["fee_rate"] = 0.0
     strategy_cfg["execution"]["stamp_tax_rate"] = 0.0
     strategy_cfg["execution"]["slippage_rate"] = 0.0
@@ -264,3 +281,135 @@ def test_backtest_carries_position_state_between_days(configs: dict) -> None:
     benchmark = pd.DataFrame({"date": ["2024-01-02", "2024-01-03", "2024-01-04"], "close": [100, 101, 102]})
     result = engine.run(features=features, benchmark=benchmark, bucket="cyclical_rotation")
     assert result.trade_list["action"].tolist() == ["BUY_1", "BUY_2"]
+
+
+def test_backtest_replays_historical_effective_universe(configs: dict, tmp_path) -> None:
+    strategy_cfg = copy.deepcopy(configs["strategy"])
+    universe_rules_cfg = copy.deepcopy(configs["universe_rules"])
+    account_cfg = copy.deepcopy(configs["account"])
+    account_cfg["account"]["initial_capital"] = 100_000
+    account_cfg["account"]["current_cash"] = 100_000
+    account_cfg["account"]["latest_total_equity"] = 100_000
+    account_cfg["execution"]["commission_rate"] = 0.0
+    account_cfg["execution"]["stamp_duty_rate_sell"] = 0.0
+    account_cfg["execution"]["slippage_bps"] = 0
+    account_cfg["execution"]["round_lot"] = 1
+    account_cfg["position_sizing"]["min_trade_value"] = 0
+    history_dir = tmp_path / "universe_history"
+    history_dir.mkdir()
+    payload = {
+        "effective_from": "2024-01-02",
+        "effective_to": "2024-01-31",
+        "stocks": [{"symbol": "600000.sh"}],
+    }
+    (history_dir / "2024-01-02.json").write_text(json.dumps(payload), encoding="utf-8")
+    engine = BacktestEngine(
+        strategy_cfg,
+        universe_rules_cfg=universe_rules_cfg,
+        account_cfg=account_cfg,
+        historical_universe_dir=history_dir,
+    )
+    features = pd.DataFrame(
+        [
+            {
+                "date": "2024-01-02",
+                "symbol": "600000.sh",
+                "name": "测试银行",
+                "industry": "银行",
+                "bucket": "defensive_dividend",
+                "open": 10.0,
+                "close": 10.0,
+                "ma20": 10.0,
+                "ma60": 9.5,
+                "ma120": 11.0,
+                "ma200": 9.0,
+                "ma250": 10.0,
+                "atr20": 0.5,
+                "ma20_slope_10d": 0.01,
+                "ma60_slope_20d": 0.01,
+                "ma120_slope_20d": 0.0,
+                "stock_q_blended": 10.0,
+                "industry_q_blended": 10.0,
+                "quality_pass": True,
+                "cycle_peak_trap": False,
+                "fundamental_break": False,
+                "final_score": 82.0,
+            },
+            {
+                "date": "2024-01-02",
+                "symbol": "601398.sh",
+                "name": "测试二号",
+                "industry": "银行",
+                "bucket": "defensive_dividend",
+                "open": 10.0,
+                "close": 10.0,
+                "ma20": 10.0,
+                "ma60": 9.5,
+                "ma120": 11.0,
+                "ma200": 9.0,
+                "ma250": 10.0,
+                "atr20": 0.5,
+                "ma20_slope_10d": 0.01,
+                "ma60_slope_20d": 0.01,
+                "ma120_slope_20d": 0.0,
+                "stock_q_blended": 10.0,
+                "industry_q_blended": 10.0,
+                "quality_pass": True,
+                "cycle_peak_trap": False,
+                "fundamental_break": False,
+                "final_score": 82.0,
+            },
+            {
+                "date": "2024-01-03",
+                "symbol": "600000.sh",
+                "name": "测试银行",
+                "industry": "银行",
+                "bucket": "defensive_dividend",
+                "open": 11.0,
+                "close": 11.0,
+                "ma20": 10.2,
+                "ma60": 9.6,
+                "ma120": 11.1,
+                "ma200": 9.1,
+                "ma250": 10.0,
+                "atr20": 0.5,
+                "ma20_slope_10d": 0.01,
+                "ma60_slope_20d": 0.01,
+                "ma120_slope_20d": 0.0,
+                "stock_q_blended": 12.0,
+                "industry_q_blended": 12.0,
+                "quality_pass": True,
+                "cycle_peak_trap": False,
+                "fundamental_break": False,
+                "final_score": 82.0,
+            },
+            {
+                "date": "2024-01-03",
+                "symbol": "601398.sh",
+                "name": "测试二号",
+                "industry": "银行",
+                "bucket": "defensive_dividend",
+                "open": 11.0,
+                "close": 11.0,
+                "ma20": 10.2,
+                "ma60": 9.6,
+                "ma120": 11.1,
+                "ma200": 9.1,
+                "ma250": 10.0,
+                "atr20": 0.5,
+                "ma20_slope_10d": 0.01,
+                "ma60_slope_20d": 0.01,
+                "ma120_slope_20d": 0.0,
+                "stock_q_blended": 12.0,
+                "industry_q_blended": 12.0,
+                "quality_pass": True,
+                "cycle_peak_trap": False,
+                "fundamental_break": False,
+                "final_score": 82.0,
+            },
+        ]
+    )
+    benchmark = pd.DataFrame({"date": ["2024-01-02", "2024-01-03"], "close": [100, 102]})
+    result = engine.run(features=features, benchmark=benchmark, bucket="combined")
+    assert result.approximate_backtest is False
+    assert result.trade_list["symbol"].tolist() == ["600000.sh"]

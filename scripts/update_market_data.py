@@ -15,6 +15,8 @@ from src.adapters.akshare_adapter import AkshareAdapter
 from src.adapters.factory import create_default_adapter
 from src.utils.config import load_project_configs, resolve_path
 from src.utils.exceptions import DataSourceError
+from src.utils.ops import write_data_quality_report, write_provider_health_report
+from src.utils.storage import clear_directories, configured_cache_directories
 
 
 RAW_FILES = {
@@ -34,6 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download and cache A-share research data locally.")
     parser.add_argument("--start-date", required=True, help="Start date in YYYY-MM-DD format.")
     parser.add_argument("--end-date", required=True, help="End date in YYYY-MM-DD format.")
+    parser.add_argument("--price-start-date", default="", help="Optional override for price history fetch start date.")
+    parser.add_argument("--benchmark-start-date", default="", help="Optional override for benchmark fetch start date.")
+    parser.add_argument("--industry-start-date", default="", help="Optional override for industry history fetch start date.")
     parser.add_argument(
         "--financial-start-date",
         default="",
@@ -87,7 +92,10 @@ def main() -> int:
     args = parse_args()
     configs = load_project_configs()
     data_cfg = configs["data_sources"]
+    if data_cfg.get("cache", {}).get("clear_on_run", False):
+        clear_directories(configured_cache_directories(data_cfg))
     adapter = create_default_adapter(data_cfg)
+    provider_entries: list[dict[str, object]] = []
 
     stock_list = adapter.get_stock_list(args.end_date)
     append_dataset(RAW_FILES["stock_list"], stock_list, ["code"])
@@ -100,21 +108,27 @@ def main() -> int:
         symbols = symbols[: args.max_symbols]
     if not symbols:
         raise DataSourceError("No symbols selected for update_market_data.py")
+    price_start_date = args.price_start_date or args.start_date
+    benchmark_start_date = args.benchmark_start_date or args.start_date
+    industry_start_date = args.industry_start_date or args.start_date
     financial_start_date = args.financial_start_date or args.start_date
 
     if not args.skip_benchmark:
         try:
-            benchmark = adapter.get_index_daily(args.benchmark, args.start_date, args.end_date)
+            benchmark = adapter.get_index_daily(args.benchmark, benchmark_start_date, args.end_date)
         except DataSourceError as exc:
             print(
                 f"[warn] benchmark download failed for {args.benchmark}: {exc}. "
                 "Continuing with stock data refresh; backtests should provide a local benchmark fallback.",
                 file=sys.stderr,
             )
+            provider_entries.append(
+                {"method": "get_index_daily", "adapter": "composite", "success": False, "error": str(exc), "attempt_index": 0}
+            )
         else:
             append_dataset(RAW_FILES["benchmark_daily"], benchmark, ["code", "date"])
 
-    prices = adapter.get_price_daily(symbols, args.start_date, args.end_date, args.adjust)
+    prices = adapter.get_price_daily(symbols, price_start_date, args.end_date, args.adjust)
     append_dataset(RAW_FILES["price_daily"], prices, ["code", "date"])
 
     st_flags = adapter.get_st_flags(symbols, args.end_date)
@@ -139,6 +153,9 @@ def main() -> int:
         print("[warn] financial download failed for all selected symbols.", file=sys.stderr)
 
     industry_catalog = discover_industries(data_cfg)
+    provider_entries.append(
+        {"method": "discover_industries", "adapter": "akshare", "success": True, "error": None, "attempt_index": 1, "rows": int(len(industry_catalog))}
+    )
     member_frames: list[pd.DataFrame] = []
     for industry_code in industry_catalog["industry_code"].astype(str):
         try:
@@ -147,15 +164,22 @@ def main() -> int:
             continue
         if frame.empty:
             continue
-        industry_name = industry_catalog.loc[industry_catalog["industry_code"] == industry_code, "industry_name"].iloc[0]
+        matched = industry_catalog.loc[industry_catalog["industry_code"] == industry_code, ["industry_name", "level"]].iloc[0]
+        industry_name = matched["industry_name"]
         frame["industry_name"] = industry_name
+        frame["industry_level"] = matched["level"]
         member_frames.append(frame)
     if not member_frames:
         raise DataSourceError("Industry member download failed for all SW industries.")
     industry_members = pd.concat(member_frames, ignore_index=True)
     append_dataset(RAW_FILES["industry_members"], industry_members, ["industry_code", "code"])
 
-    industry_daily = adapter.get_industry_daily(args.start_date, args.end_date, level="三级行业")
+    industry_daily_frames: list[pd.DataFrame] = []
+    for level_label, level_value in (("first", "一级行业"), ("second", "二级行业"), ("third", "三级行业")):
+        frame = adapter.get_industry_daily(industry_start_date, args.end_date, level=level_value)
+        frame["industry_level"] = level_label
+        industry_daily_frames.append(frame)
+    industry_daily = pd.concat(industry_daily_frames, ignore_index=True)
     append_dataset(RAW_FILES["industry_daily"], industry_daily, ["industry_code", "date"])
 
     if not args.skip_valuations:
@@ -172,6 +196,14 @@ def main() -> int:
             raise DataSourceError("Stock valuation download failed for all selected symbols.")
         valuations = pd.concat(valuation_frames, ignore_index=True)
         append_dataset(RAW_FILES["stock_valuation"], valuations, ["code", "date", "metric"])
+    provider_entries.extend(adapter.call_history)
+    write_provider_health_report(
+        "provider_health/latest.json",
+        as_of_date=args.end_date,
+        entries=provider_entries,
+        source="update_market_data",
+    )
+    write_data_quality_report("data_quality/latest.json", list(RAW_FILES.values()), args.end_date)
     return 0
 
 

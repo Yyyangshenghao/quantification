@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 from pathlib import Path
 from typing import Any
@@ -29,10 +30,17 @@ def _sanitize_json(payload: Any) -> Any:
         return [_sanitize_json(item) for item in payload]
     if isinstance(payload, tuple):
         return [_sanitize_json(item) for item in payload]
+    if hasattr(payload, "tolist") and not isinstance(payload, (str, bytes)):
+        try:
+            return _sanitize_json(payload.tolist())
+        except Exception:
+            pass
     if payload is None:
         return None
     if isinstance(payload, (str, int, bool)):
         return payload
+    if isinstance(payload, (dt.datetime, dt.date, pd.Timestamp)):
+        return payload.isoformat()
     try:
         if pd.isna(payload):
             return None

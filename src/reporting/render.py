@@ -10,10 +10,13 @@ from src.utils.config import resolve_path
 
 def _format_action_line(item: dict) -> str:
     blocked = f" | blocked={item['blocked_reason']}" if item.get("blocked_reason") else ""
+    shares = ""
+    if item.get("delta_shares") not in (None, 0):
+        shares = f" | shares {item.get('delta_shares'):+d}"
     return (
         f"- {item['symbol']} {item['name']}: {item['action_enum']} | "
         f"{item['current_position_tranches']} -> {item['target_position_tranches']} tranche | "
-        f"w {item['current_weight']:.2%} -> {item['target_weight']:.2%}{blocked} | "
+        f"w {item['current_weight']:.2%} -> {item['target_weight']:.2%}{shares}{blocked} | "
         f"{item['action_reason']}"
     )
 
@@ -100,6 +103,10 @@ def _orders_frame(report: dict) -> pd.DataFrame:
         "current_weight",
         "target_weight",
         "target_position_change",
+        "current_shares",
+        "target_shares",
+        "delta_shares",
+        "rounded_lots",
         "action_enum",
         "priority_score",
         "action_reason",
@@ -109,6 +116,11 @@ def _orders_frame(report: dict) -> pd.DataFrame:
         "current_cash",
         "available_buying_power",
         "target_order_value",
+        "estimated_turnover",
+        "estimated_commission",
+        "estimated_stamp_duty",
+        "estimated_total_cash_impact",
+        "target_price_reference",
     ]
     rows = []
     for item in report.get("orders", []):
