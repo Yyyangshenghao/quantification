@@ -1,0 +1,7 @@
+portfolio:
+  manual_only: true
+  default_tranches: 3
+  cash_weight: 1.0
+  notes: 手动维护当前正式持仓，研究程序只读不自动下单。
+
+positions: []

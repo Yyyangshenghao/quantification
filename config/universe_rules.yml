@@ -1,0 +1,96 @@
+methodology_version: effective_universe_v2
+rebalance_frequency: monthly
+target_universe_size: 16
+target_universe_floor: 12
+target_universe_ceiling: 18
+max_per_industry: 2
+incumbent_keep_rank: 4
+new_entry_rank: 2
+min_final_score: 60
+min_second_name_score: 65
+max_rank_gap_for_second_name: 12
+freeze_removed_holdings: true
+force_exit_rules:
+  - st
+  - fundamental_break
+  - delist_risk
+  - prolonged_data_failure
+data_stale_blocks_new_entries: true
+prolonged_data_failure_days: 10
+long_suspension_days: 20
+core_required_fields:
+  - industry
+  - market_cap_billion
+  - avg_amount_60d_million
+  - roe
+  - latest_net_profit
+  - cfo_ttm
+  - debt_to_assets
+  - stock_pb_q_blended
+  - industry_pb_q_blended
+  - stock_pe_ttm_q_blended
+  - industry_pe_ttm_q_blended
+bucket_filters:
+  base:
+    listed_days_min: 1500
+    main_metric_history_years_min: 5
+    avg_amount_60d_million_min: 100
+    market_cap_billion_min: 50
+    require_industry: true
+    require_a_share: true
+    require_not_st: true
+  defensive_dividend:
+    market_cap_billion_min: 50
+    avg_amount_60d_million_min: 100
+    roe_min: 8
+    latest_net_profit_min_exclusive: 0
+    cfo_ttm_min_exclusive: 0
+    debt_to_assets_max: 75
+    dv_ttm_min: 0.03
+    pe_ttm_max_when_primary_metric: 20
+    pb_min_exclusive: 0
+    pb_q_blended_max_when_primary_metric: 70
+  cyclical_rotation:
+    market_cap_billion_min: 100
+    avg_amount_60d_million_min: 100
+    latest_net_profit_min_exclusive: 0
+    roe_min: 5
+    pb_min_exclusive: 0
+    market_cap_industry_rank_top_n: 8
+    market_cap_industry_rank_top_pct: 0.30
+scoring:
+  defensive_dividend:
+    valuation:
+      cheap_score: 0.45
+      industry_cheap_score: 0.25
+      dividend_score: 0.20
+      pe_discount_score: 0.10
+    quality:
+      roe_score: 0.35
+      cfo_score: 0.25
+      debt_score: 0.20
+      dividend_score: 0.20
+    leader:
+      size_score: 0.60
+      liquidity_score: 0.40
+    final:
+      valuation_score_def: 0.45
+      quality_score_def: 0.35
+      leader_score_def: 0.20
+  cyclical_rotation:
+    valuation:
+      stock_pb_cheap_score: 0.55
+      industry_pb_cheap_score: 0.45
+    quality:
+      roe_score: 0.40
+      cfo_score: 0.30
+      debt_score: 0.15
+      profit_positive_stability_score: 0.15
+    leader:
+      size_score: 0.60
+      liquidity_score: 0.40
+    final:
+      valuation_score_cyc: 0.40
+      quality_score_cyc: 0.25
+      leader_score_cyc: 0.20
+      cycle_safety_score: 0.15

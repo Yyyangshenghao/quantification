@@ -1,0 +1,65 @@
+strategy_name: qvta_state_machine_v2
+
+industry_bucket_map:
+  银行: defensive_dividend
+  非银金融: defensive_dividend
+  通信: defensive_dividend
+  公用事业: defensive_dividend
+  石油石化: defensive_dividend
+  交通运输: defensive_dividend
+  家用电器: defensive_dividend
+  煤炭: cyclical_rotation
+  有色金属: cyclical_rotation
+  钢铁: cyclical_rotation
+  建筑材料: cyclical_rotation
+  基础化工: cyclical_rotation
+
+industry_bucket_candidates:
+  银行:
+    - defensive_dividend
+  非银金融:
+    - defensive_dividend
+  通信:
+    - defensive_dividend
+  公用事业:
+    - defensive_dividend
+  石油石化:
+    - defensive_dividend
+    - cyclical_rotation
+  交通运输:
+    - defensive_dividend
+    - cyclical_rotation
+  家用电器:
+    - defensive_dividend
+  煤炭:
+    - cyclical_rotation
+  有色金属:
+    - cyclical_rotation
+  钢铁:
+    - cyclical_rotation
+  建筑材料:
+    - cyclical_rotation
+  基础化工:
+    - cyclical_rotation
+
+industry_metric_map:
+  银行: pb
+  非银金融: pb
+  通信: pe_ttm
+  公用事业: pe_ttm
+  石油石化: pb
+  交通运输: pe_ttm
+  家用电器: pe_ttm
+  煤炭: pb
+  有色金属: pb
+  钢铁: pb
+  建筑材料: pb
+  基础化工: pb
+
+bucket_default_metric:
+  defensive_dividend: pe_ttm
+  cyclical_rotation: pb
+
+financial_industries:
+  - 银行
+  - 非银金融

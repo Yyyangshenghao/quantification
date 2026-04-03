@@ -1,0 +1,151 @@
+strategy_name: qvta_state_machine_v2
+
+valuation:
+  windows_years:
+    q_5y: 5
+    q_10y: 10
+  blended_weights:
+    q_5y: 0.6
+    q_10y: 0.4
+  trading_days_per_year: 252
+
+market_regime:
+  benchmark_index: "000300"
+  moving_averages:
+    ma60: 60
+    ma200: 200
+  max_total_position:
+    risk_on: 1.0
+    neutral: 0.7
+    risk_off: 0.4
+  risk_off_opening_rules:
+    allow_new_buckets:
+      - defensive_dividend
+    defensive_dividend_max_stock_q_blended: 10
+
+execution:
+  trade_at: next_day_open
+  fee_rate: 0.0003
+  stamp_tax_rate: 0.001
+  slippage_rate: 0.0005
+  default_tranches: 3
+  equal_weight_target_universe_size: 16
+  grid_execution:
+    enabled: true
+    atr_multiplier: 1.5
+    min_step: 0.04
+    max_step: 0.08
+    reduce_extra_min_stock_q_blended: 40
+    hard_add_ban:
+      close_to_ma250_min: 0.80
+      ma120_slope_20d_min: -0.05
+
+financial_effective_date:
+  use_announcement_date: true
+  fallback_if_missing: report_date_plus_days
+  fallback_days: 30
+
+fundamental_break:
+  non_financial:
+    latest_net_profit_max: 0
+    roe_min: 5
+    cfo_ttm_non_positive_periods: 2
+  financial:
+    latest_net_profit_max: 0
+    roe_min: 5
+    require_is_st_false: true
+
+buckets:
+  defensive_dividend:
+    allowed_industries:
+      - 银行
+      - 非银金融
+      - 通信
+      - 公用事业
+      - 石油石化
+      - 交通运输
+      - 家用电器
+    filters:
+      listed_days_min: 1500
+      not_st_required: true
+      market_cap_billion_min: 50
+      avg_amount_60d_million_min: 100
+      roe_min: 8
+      latest_net_profit_min_exclusive: 0
+      cfo_ttm_min_exclusive: 0
+      debt_to_assets_max: 75
+      dv_ttm_min: 0.03
+      pe_ttm_max_when_primary_metric: 20
+      pb_q_blended_max_when_primary_metric: 70
+    buy_levels:
+      BUY_1:
+        stock_q_blended_max: 20
+        industry_q_blended_max: 30
+        close_to_ma120_max: 0.92
+      BUY_2:
+        stock_q_blended_max: 15
+        industry_q_blended_max: 25
+        close_to_ma120_max: 0.88
+      BUY_3:
+        stock_q_blended_max: 10
+        industry_q_blended_max: 20
+        close_to_ma120_max: 0.84
+    reduce:
+      stock_q_blended_min: 70
+      close_to_ma120_min: 1.05
+    sell_all:
+      stock_q_blended_min: 85
+      industry_q_blended_min: 85
+      fundamental_break_required: true
+
+  cyclical_rotation:
+    allowed_industries:
+      - 煤炭
+      - 有色金属
+      - 钢铁
+      - 石油石化
+      - 建筑材料
+      - 基础化工
+      - 交通运输
+    primary_metric: pb
+    secondary_metric: pe_ttm
+    filters:
+      listed_days_min: 1500
+      not_st_required: true
+      market_cap_billion_min: 100
+      avg_amount_60d_million_min: 100
+      latest_net_profit_min_exclusive: 0
+      roe_min: 5
+      pb_min_exclusive: 0
+      market_cap_industry_rank_top_n: 8
+      market_cap_industry_rank_top_pct: 0.30
+    cycle_trap_filter:
+      pe_q_blended_max_primary: 20
+      roe_pct_in_last_12_quarters_min_primary: 80
+      pe_q_blended_max_secondary: 10
+      roe_pct_in_last_12_quarters_min_secondary: 90
+      lookback_quarters: 12
+    buy_levels:
+      BUY_1:
+        stock_q_blended_max: 15
+        industry_q_blended_max: 20
+        close_gt_ma20: true
+        ma20_slope_10d_min: 0
+      BUY_2:
+        stock_q_blended_max: 10
+        industry_q_blended_max: 15
+        close_gt_ma60: true
+        ma20_slope_10d_min: 0
+      BUY_3:
+        stock_q_blended_max: 5
+        industry_q_blended_max: 10
+        close_gt_ma60: true
+        ma60_slope_20d_min: 0
+    reduce:
+      stock_q_blended_min: 65
+      close_gte_ma20: true
+    sell_all:
+      stock_q_blended_min: 80
+      industry_q_blended_min: 85
+      close_below_ma60_and_ma20_slope_10d_lt_zero: true
+      fundamental_break_required: true

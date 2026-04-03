@@ -1,0 +1,82 @@
+storage:
+  raw_dir: data/raw
+  curated_dir: data/curated
+  features_dir: data/features
+  snapshots_dir: data/snapshots
+  report_dir: reports
+  duckdb_path: data/curated/research.duckdb
+
+cache:
+  enabled: true
+  format: parquet
+  compression: zstd
+
+retry:
+  attempts: 3
+  backoff_seconds: 1.5
+
+defaults:
+  adjust: qfq
+  trading_days_per_year: 252
+  stock_list_source_order:
+    - akshare
+    - baostock
+  price_source_order:
+    - akshare
+    - baostock
+    - efinance
+  valuation_source_order:
+    - baostock
+    - akshare
+  financial_source_order:
+    - akshare
+    - baostock
+  st_flag_source_order:
+    - akshare
+    - baostock
+    - efinance
+  market_cap_source_order:
+    - efinance
+    - akshare
+    - baostock
+  industry_source_order:
+    - akshare
+
+jqdata:
+  enabled_if_env: true
+  username_env: JQDATA_USERNAME
+  password_env: JQDATA_PASSWORD
+
+akshare:
+  enabled: true
+  valuation_endpoint: stock_zh_valuation_baidu
+  industry_daily_endpoint: index_analysis_daily_sw
+  industry_info_endpoints:
+    - sw_index_first_info
+    - sw_index_second_info
+    - sw_index_third_info
+  industry_members_endpoints:
+    - sw_index_third_cons
+    - index_component_sw
+
+baostock:
+  enabled: true
+  fields:
+    - date
+    - code
+    - open
+    - high
+    - low
+    - close
+    - volume
+    - amount
+    - turn
+    - peTTM
+    - pbMRQ
+    - psTTM
+    - pcfNcfTTM
+    - isST
+
+efinance:
+  enabled: true
+  price_fallback_only: true

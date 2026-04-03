@@ -1,0 +1,24 @@
+mode: live_manual
+base_currency: CNY
+as_of_date: 2026-04-03
+
+account:
+  initial_capital: 10000
+  current_cash: 0
+  reserved_cash: 0
+  latest_total_equity: 0
+
+execution:
+  commission_rate: 0.0003
+  stamp_duty_rate_sell: 0.0005
+  slippage_bps: 5
+  round_lot: 100
+
+position_sizing:
+  max_tranches_per_stock: 3
+  tranche_weights:
+    1: 0.03
+    2: 0.06
+    3: 0.09
+  max_single_stock_weight: 0.12
+  min_trade_value: 5000

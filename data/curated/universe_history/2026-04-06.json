@@ -1,0 +1,94 @@
+{
+  "as_of_date": "2026-04-03",
+  "rebalance_day": true,
+  "effective_from": "2026-04-06",
+  "effective_to": "2026-04-30",
+  "methodology_version": "effective_universe_v2",
+  "candidate_pool_size": 5,
+  "effective_universe_size": 3,
+  "change_counts": {
+    "added": 3
+  },
+  "changes": [
+    {
+      "symbol": "600000.sh",
+      "name": "浦发银行",
+      "industry": "银行",
+      "change_tag": "added",
+      "selected_as": "new_entry",
+      "final_score": 81.3125
+    },
+    {
+      "symbol": "601088.sh",
+      "name": "中国神华",
+      "industry": "煤炭",
+      "change_tag": "added",
+      "selected_as": "new_entry",
+      "final_score": 89.075
+    },
+    {
+      "symbol": "601398.sh",
+      "name": "工商银行",
+      "industry": "银行",
+      "change_tag": "added",
+      "selected_as": "new_entry",
+      "final_score": 75.245
+    }
+  ],
+  "stocks": [
+    {
+      "symbol": "601088.sh",
+      "name": "中国神华",
+      "bucket": "cyclical_rotation",
+      "industry_l1": "煤炭",
+      "main_metric": "pb",
+      "final_score": 89.075,
+      "stock_q_blended": 15.0,
+      "industry_q_blended": 21.0,
+      "roe": 13.0,
+      "dv_ttm": 0.06,
+      "market_cap_billion": 550.0,
+      "avg_amount_60d_million": 220.0,
+      "industry_rank": 1,
+      "selected_as": "new_entry",
+      "cycle_trap": false,
+      "force_exit_reasons": []
+    },
+    {
+      "symbol": "600000.sh",
+      "name": "浦发银行",
+      "bucket": "defensive_dividend",
+      "industry_l1": "银行",
+      "main_metric": "pb",
+      "final_score": 81.3125,
+      "stock_q_blended": 20.0,
+      "industry_q_blended": 27.0,
+      "roe": 11.0,
+      "dv_ttm": 0.045,
+      "market_cap_billion": 260.0,
+      "avg_amount_60d_million": 180.0,
+      "industry_rank": 1,
+      "selected_as": "new_entry",
+      "cycle_trap": false,
+      "force_exit_reasons": []
+    },
+    {
+      "symbol": "601398.sh",
+      "name": "工商银行",
+      "bucket": "defensive_dividend",
+      "industry_l1": "银行",
+      "main_metric": "pb",
+      "final_score": 75.245,
+      "stock_q_blended": 29.0,
+      "industry_q_blended": 27.0,
+      "roe": 10.0,
+      "dv_ttm": 0.04,
+      "market_cap_billion": 230.0,
+      "avg_amount_60d_million": 150.0,
+      "industry_rank": 2,
+      "selected_as": "new_entry",
+      "cycle_trap": false,
+      "force_exit_reasons": []
+    }
+  ]
+}
